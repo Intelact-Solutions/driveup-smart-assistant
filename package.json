@@ -1,0 +1,39 @@
+{
+  "name": "driveup-smart-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone AI chatbot that answers DriveUp questions from the docs/kb knowledge base.",
+  "packageManager": "pnpm@11.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs",
+      "sharp"
+    ]
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "index:kb": "tsx scripts/index-kb.ts",
+    "build:labels": "tsx scripts/build-labels.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
