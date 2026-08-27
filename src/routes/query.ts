@@ -14,7 +14,12 @@ import {
 } from '../memory.js';
 import type { Conversation } from '../memory.js';
 
-const SYSTEM_PROMPT =
+const SYSTEM_PROMPT = (platform: string): string =>
+  (platform === 'admin'
+    ? 'This chat runs inside the DriveUp Admin web platform, which driving school owners, managers and instructors use on their computers. ' +
+      'Answer from the perspective of the admin user and describe how things work in the web admin (back-office). ' +
+      'Only describe the mobile app if the user explicitly asks about it (for example "mobile", "app", "smartphone", "android", "iOS"). '
+    : '') +
   'You are a friendly and helpful assistant for DriveUp, a driving school app. ' +
   'Talk to the user like a colleague would: warm, clear, and down to earth. ' +
   'Avoid jargon and overly technical language — explain things in plain, everyday words. ' +
@@ -70,6 +75,18 @@ function detectLanguage(text: string): string {
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const MOBILE_INTENT =
+  /\b(mobile|mobil|app|smartphone|android|ios|iphone|handy|appli)\b/i;
+
+function hasMobileIntent(question: string, context: string[]): boolean {
+  return [question, ...context].some((text) => MOBILE_INTENT.test(text));
+}
+
+function isMobileChunk(file: string): boolean {
+  const normalized = file.replace(/\\/g, '/').toLowerCase();
+  return normalized.startsWith('features/mobile/') || normalized.startsWith('mobile/');
 }
 
 function buildLabelHints(labels: LabelMap, language: string, text: string, max = 50): string[] {
@@ -132,6 +149,7 @@ queryRouter.post('/query', async (req, res) => {
     const rawConversationId =
       typeof req.body?.conversationId === 'string' ? req.body.conversationId.trim() : '';
     const conversation = getOrCreateConversation(rawConversationId || undefined);
+    const platform = typeof req.body?.platform === 'string' ? req.body.platform.trim() : '';
 
     const index = loadIndex(config.kbIndexPath);
 
@@ -140,8 +158,16 @@ queryRouter.post('/query', async (req, res) => {
       conversation,
       config.conversationContextQueries,
     );
+
+    const recentUserTurns = recentUserMessages(conversation, config.conversationContextQueries);
+    const mobileIntent = hasMobileIntent(question, recentUserTurns);
+    const searchable =
+      platform === 'admin' && !mobileIntent
+        ? index.filter((entry) => !isMobileChunk(entry.chunk.file))
+        : index;
+
     const queryVectors = await embedTexts(retrievalQueries);
-    const results = mergeSearchResults(index, queryVectors, config.topK);
+    const results = mergeSearchResults(searchable, queryVectors, config.topK);
 
     const excerpts = results
       .map((r, i) => `[${i + 1}] File: ${r.chunk.file}\n${r.chunk.content}`)
@@ -158,7 +184,7 @@ queryRouter.post('/query', async (req, res) => {
 
     const answer = await chatDeepSeek(
       [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: SYSTEM_PROMPT(platform) },
         ...conversationHistory(conversation),
         { role: 'user', content: userPrompt },
       ],
